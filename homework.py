@@ -1,12 +1,14 @@
 import time
 import logging
-from logging.handlers import RotatingFileHandler
 import os
 import requests
 import sys
 
 from dotenv import load_dotenv
 from telebot import TeleBot, apihelper
+
+from exceptions import Not200Exception, APIRequestException
+
 
 load_dotenv()
 
@@ -26,25 +28,6 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename='homework.log',
-    filemode='a'
-)
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-handler = RotatingFileHandler(
-    'my_logger.log',
-    maxBytes=50000000,
-    backupCount=5
-)
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-
 
 def check_tokens():
     """Проверяет необходимые токены."""
@@ -53,9 +36,9 @@ def check_tokens():
 
 def send_message(bot, message):
     """Отправляет сообщение в чат."""
-    chat_id = TELEGRAM_CHAT_ID
     try:
-        bot.send_message(chat_id, message)
+        logging.debug('Отправка сообщения')
+        bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.debug(f'Сообщение отправлено: {message}')
     except apihelper.ApiException as error:
         logging.error(f'Ошибка при отправке сообщения: {error}')
@@ -68,45 +51,54 @@ def get_api_answer(timestamp):
         response = requests.get(
             ENDPOINT, headers=HEADERS, params=from_date
         )
-        response.raise_for_status()
-    except requests.RequestException as error:
-        logging.error(f'Ошибка при запросе к API: {error}')
-        return error
-    if response.status_code == 204:
-        logging.debug('Ошибка при запросе')
-        raise requests.HTTPError
+        if response.status_code != 200:
+            raise Not200Exception
+    except requests.RequestException:
+        raise APIRequestException
     return response.json()
 
 
 def check_response(response):
     """Проверяет статус ответа API."""
-    try:
-        homeworks = response['homeworks']
-    except KeyError:
-        logging.error('Данные не соответствуют ожидаемым')
-        raise ValueError('Данные не соответствуют ожидаемым')
+    if not isinstance(response, dict):
+        raise TypeError('Тип данных не соответствует ожидаемым')
+    if 'homeworks' not in response:
+        raise KeyError
+    homeworks = response['homeworks']
     if not isinstance(homeworks, list):
-        logging.error('Значение "homeworks" не является списком')
         raise TypeError('Значение "homeworks" не является списком')
     return homeworks
 
 
 def parse_status(homework):
     """Получает необходимые данные из ответа API."""
-    try:
-        homework_name = homework['homework_name']
-        status_name = homework['status']
-        verdict = HOMEWORK_VERDICTS[status_name]
-        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
-    except KeyError as error:
-        logging.error(f'Ошибка при получении статуса домашней работы: {error}')
-        raise KeyError
+    if 'homework_name' not in homework:
+        raise KeyError('Нет названия домашней работы')
+    if 'status' not in homework:
+        raise KeyError('Нет статуса домашней работы')
+    status_name = homework['status']
+    if status_name not in HOMEWORK_VERDICTS:
+        raise KeyError('Незадокументированный статус домашней работы')
+    homework_name = homework['homework_name']
+    verdict = HOMEWORK_VERDICTS[status_name]
+    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def main():
     """Основная логика работы бота."""
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename='homework.log',
+        filemode='a'
+    )
+
     if not check_tokens():
-        logging.critical('Отсутствует один или несколько токенов')
+        if not PRACTICUM_TOKEN:
+            logging.critical('Отсутствует PRACTICUM_TOCKEN')
+        if not TELEGRAM_TOKEN:
+            logging.critical('Отсутствует TELEGRAM_TOCKEN')
+        if not TELEGRAM_CHAT_ID:
+            logging.critical('Отсутствует CHAT_ID_TOCKEN')
         sys.exit()
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
