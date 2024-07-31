@@ -28,9 +28,22 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
+if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename='homework.log',
+        filemode='a'
+    )
+
 
 def check_tokens():
     """Проверяет необходимые токены."""
+    if not PRACTICUM_TOKEN:
+        logging.critical('Отсутствует PRACTICUM_TOCKEN')
+    if not TELEGRAM_TOKEN:
+        logging.critical('Отсутствует TELEGRAM_TOCKEN')
+    if not TELEGRAM_CHAT_ID:
+        logging.critical('Отсутствует CHAT_ID_TOCKEN')
     return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
@@ -52,7 +65,7 @@ def get_api_answer(timestamp):
             ENDPOINT, headers=HEADERS, params=from_date
         )
         if response.status_code != 200:
-            raise Not200Exception
+            raise Not200Exception(response.status_code)
     except requests.RequestException:
         raise APIRequestException
     return response.json()
@@ -86,20 +99,8 @@ def parse_status(homework):
 
 def main():
     """Основная логика работы бота."""
-    logging.basicConfig(
-        level=logging.DEBUG,
-        filename='homework.log',
-        filemode='a'
-    )
-
     if not check_tokens():
-        if not PRACTICUM_TOKEN:
-            logging.critical('Отсутствует PRACTICUM_TOCKEN')
-        if not TELEGRAM_TOKEN:
-            logging.critical('Отсутствует TELEGRAM_TOCKEN')
-        if not TELEGRAM_CHAT_ID:
-            logging.critical('Отсутствует CHAT_ID_TOCKEN')
-        sys.exit()
+        sys.exit('Отсутствет один или несколько токенов')
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
 
