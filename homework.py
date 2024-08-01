@@ -28,13 +28,6 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-if __name__ == '__main__':
-    logging.basicConfig(
-        level=logging.DEBUG,
-        filename='homework.log',
-        filemode='a'
-    )
-
 
 def check_tokens():
     """Проверяет необходимые токены."""
@@ -123,4 +116,10 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename='homework.log',
+        filemode='a'
+    )
+
     main()
